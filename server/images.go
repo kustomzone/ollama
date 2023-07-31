@@ -871,13 +871,10 @@ func checkBlobExistence(mp ModelPath, digest string, regOpts *RegistryOptions) (
 	return resp.StatusCode == http.StatusOK, nil
 }
 
-func uploadBlobChunked(mp ModelPath, location string, layer *Layer, regOpts *RegistryOptions, fn func(api.ProgressResponse)) error {
+func uploadBlobChunked(mp ModelPath, url string, layer *Layer, regOpts *RegistryOptions, fn func(api.ProgressResponse)) error {
 	// TODO allow resumability
 	// TODO allow canceling uploads via DELETE
 	// TODO allow cross repo blob mount
-
-	// Create URL
-	url := fmt.Sprintf("%s", location)
 
 	fp, err := GetBlobsPath(layer.Digest)
 	if err != nil {
@@ -927,7 +924,7 @@ func uploadBlobChunked(mp ModelPath, location string, layer *Layer, regOpts *Reg
 		// Check for success: For a successful upload, the Docker registry will respond with a 201 Created
 		if resp.StatusCode != http.StatusAccepted {
 			fn(api.ProgressResponse{
-				Status:    fmt.Sprintf("error uploading layer"),
+				Status:    "error uploading layer",
 				Digest:    layer.Digest,
 				Total:     int(layer.Size),
 				Completed: int(totalUploaded),
