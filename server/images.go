@@ -889,21 +889,14 @@ func uploadBlobChunked(mp ModelPath, url string, layer *Layer, regOpts *Registry
 		return err
 	}
 
-	headers := make(map[string]string)
-	headers["Content-Type"] = "application/octet-stream"
-
-	chunkSize := 1 << 20
-	buf := make([]byte, chunkSize)
 	var totalUploaded int
 
 	for {
-		n, err := f.Read(buf)
+		var b bytes.Buffer
+		n, err := io.CopyN(&b, f, 1<<20)
 		if err != nil {
 			return err
 		}
-
-		headers["Content-Length"] = fmt.Sprintf("%d", n)
-		headers["Content-Range"] = fmt.Sprintf("%d-%d", totalUploaded, totalUploaded+n-1)
 
 		fn(api.ProgressResponse{
 			Status:    fmt.Sprintf("uploading %s", layer.Digest),
@@ -912,11 +905,12 @@ func uploadBlobChunked(mp ModelPath, url string, layer *Layer, regOpts *Registry
 			Completed: int(totalUploaded),
 		})
 
-		// change the buffersize for the last chunk
-		if n < chunkSize {
-			buf = buf[:n]
+		headers := map[string]string{
+			"Content-Length": strconv.Itoa(int(n)),
+			"Content-Range":  fmt.Sprintf("%d-%d", totalUploaded, totalUploaded+int(n)-1),
 		}
-		resp, err := makeRequest("PATCH", url, headers, bytes.NewReader(buf), regOpts)
+
+		resp, err := makeRequest("PATCH", url, headers, &b, regOpts)
 		if err != nil {
 			log.Printf("couldn't upload blob: %v", err)
 			return err
@@ -936,25 +930,33 @@ func uploadBlobChunked(mp ModelPath, url string, layer *Layer, regOpts *Registry
 			return fmt.Errorf("on layer upload registry responded with code %d: %v", resp.StatusCode, string(body))
 		}
 
-		totalUploaded += n
+		totalUploaded += int(n)
+
 		if totalUploaded >= layer.Size {
-			url = fmt.Sprintf("%s&digest=%s", url, layer.Digest)
-
-			// finish the upload
-			resp, err := makeRequest("PUT", url, nil, nil, regOpts)
-			if err != nil {
-				log.Printf("couldn't finish upload: %v", err)
-				return err
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode != http.StatusCreated {
-				body, _ := io.ReadAll(resp.Body)
-				return fmt.Errorf("on finish upload registry responded with code %d: %v", resp.StatusCode, string(body))
-			}
 			break
 		}
 	}
+
+	url = fmt.Sprintf("%s&digest=%s", url, layer.Digest)
+
+	resp, err := makeRequest("PUT", url, nil, nil, regOpts)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("on finish upload registry responded with code %d: %v", resp.StatusCode, string(body))
+	}
+
+	fn(api.ProgressResponse{
+		Status:    fmt.Sprintf("uploading %s", layer.Digest),
+		Digest:    layer.Digest,
+		Total:     int(layer.Size),
+		Completed: int(layer.Size),
+	})
+
 	return nil
 }
 
