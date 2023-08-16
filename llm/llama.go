@@ -7,6 +7,11 @@ package llm
 #cgo darwin CPPFLAGS:  -DGGML_USE_ACCELERATE
 #cgo darwin,arm64 CPPFLAGS: -DGGML_USE_METAL -DGGML_METAL_NDEBUG
 #cgo darwin LDFLAGS: -framework Accelerate -framework Foundation -framework Metal -framework MetalKit -framework MetalPerformanceShaders
+#cgo linux CFLAGS: -DGGML_USE_CUBLAS -I/usr/local/cuda/include -I/opt/cuda/include -I$(CUDA_PATH)/targets/x86_64-linux/include
+#cgo linux CXXFLAGS: -DGGML_USE_CUBLAS -I/usr/local/cuda/include -I/opt/cuda/include -I$(CUDA_PATH)/targets/x86_64-linux/include
+#cgo linux LDFLAGS: -lcublas -lculibos -lcudart -lcublasLt -lpthread -ldl -lrt -L/usr/local/cuda/lib64 -L/opt/cuda/lib64 -L$(CUDA_PATH)/targets/x86_64-linux/lib
+#cgo linux OBJS: ggml-cuda.o
+#cgo linux NVCCFLAGS: --forward-unknown-to-host-compiler -use_fast_math
 #include <stdlib.h>
 #include "llama.h"
 
